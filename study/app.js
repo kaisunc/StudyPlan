@@ -7,6 +7,7 @@ const LETTERS = ["A", "B", "C", "D"];
 const SUBJECTS = [
 	{ name: "國文" }, { name: "英語" }, { name: "數學" }, { name: "自然" },
 	{ group: "社會", name: "地理" }, { group: "社會", name: "歷史" }, { group: "社會", name: "公民" },
+	{ name: "藝術" }, { name: "科技" }, { name: "綜合活動" }, { name: "健康與體育" },
 ];
 const GRADES = ["七上", "七下", "八上", "八下", "九上", "九下"];
 const HISTORY_KEY = "studyplan.history.v1";
@@ -37,24 +38,26 @@ function pickVoice() {
 		|| voices.find((v) => /zh[-_]TW/i.test(v.lang))
 		|| voices[0];
 }
+function englishVoice() { const v = speechSynthesis.getVoices(); return v.find((x) => /^en[-_]US/i.test(x.lang)) || v.find((x) => /^en/i.test(x.lang)); }
 function speakable(text) { return text.replace(/→/g, "，到，").replace(/[（(]([A-D])[)）]/g, "$1，"); }
-function speak(text) {
+function speak(text, lang) {
 	speechSynthesis.cancel();
-	const voice = pickVoice();
+	const en = lang === "en";
+	const voice = en ? englishVoice() : pickVoice();
 	const rate = Number(recall(RATE_KEY)) || 0.95;
 	// Chrome cuts off long utterances, so queue one per sentence.
-	for (const part of speakable(text).split(/(?<=[。！？\n])/)) {
+	for (const part of (en ? text : speakable(text)).split(en ? /(?<=[.?!\n])\s/ : /(?<=[。！？\n])/)) {
 		if (!part.trim()) continue;
 		const u = new SpeechSynthesisUtterance(part);
-		if (voice) { u.voice = voice; u.lang = voice.lang; } else { u.lang = "zh-TW"; }
+		if (voice) { u.voice = voice; u.lang = voice.lang; } else { u.lang = en ? "en-US" : "zh-TW"; }
 		u.rate = rate;
 		speechSynthesis.speak(u);
 	}
 }
-function speakButton(text) {
+function speakButton(text, lang) {
 	const b = document.createElement("button");
 	b.className = "speak"; b.type = "button"; b.textContent = "🔊 朗讀"; b.title = "朗讀";
-	b.addEventListener("click", () => speak(text));
+	b.addEventListener("click", () => speak(text, lang));
 	return b;
 }
 
@@ -170,7 +173,7 @@ function testView(key) {
 	};
 
 	const cards = questions.map((q, n) => {
-		const spoken = `第${n + 1}題。${q.q}\n` + q.options.map((o, i) => `（${LETTERS[i]}）${o}。`).join("\n");
+		const spoken = term.lang === "en" ? `Question ${n + 1}. ${q.q}\n` + q.options.map((o, i) => `${LETTERS[i]}. ${o}.`).join("\n") : `第${n + 1}題。${q.q}\n` + q.options.map((o, i) => `（${LETTERS[i]}）${o}。`).join("\n");
 		const opts = q.options.map((text, i) => {
 			const input = el("input", { type: "radio", name: q.id, value: String(i) });
 			const label = el("label", { class: "opt" }, input, `（${LETTERS[i]}）${text}`);
@@ -181,7 +184,7 @@ function testView(key) {
 			});
 			return label;
 		});
-		return { q, node: el("div", { class: "card q" }, el("div", { class: "stem" }, `${n + 1}. ${q.q}`, speakButton(spoken)), el("div", {}, opts)) };
+		return { q, node: el("div", { class: "card q" }, el("div", { class: "stem" }, `${n + 1}. ${q.q}`, speakButton(spoken, term.lang)), el("div", {}, opts)) };
 	});
 
 	submit.addEventListener("click", () => {
