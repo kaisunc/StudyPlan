@@ -3,6 +3,12 @@
 
 const app = document.getElementById("app");
 const LETTERS = ["A", "B", "C", "D"];
+// Front-page matrix. A cell is built when a data file has matching subject + name.
+const SUBJECTS = [
+	{ name: "國文" }, { name: "英語" }, { name: "數學" }, { name: "自然" },
+	{ group: "社會", name: "地理" }, { group: "社會", name: "歷史" }, { group: "社會", name: "公民" },
+];
+const GRADES = ["七上", "七下", "八上", "八下", "九上", "九下"];
 const HISTORY_KEY = "studyplan.history.v1";
 const VOICE_KEY = "studyplan.voice";
 const RATE_KEY = "studyplan.rate";
@@ -16,6 +22,10 @@ function addResult(result) { const h = history(); h.push(result); store(HISTORY_
 // ---------- data lookup ----------
 function allChapters() { return STUDY.terms.flatMap((t) => t.chapters.map((c) => ({ term: t, chapter: c, key: t.id + "-" + c.id }))); }
 function findChapter(key) { return allChapters().find((x) => x.key === key); }
+function findTerm(subject, grade) { return STUDY.terms.find((t) => t.subject === subject && t.name === grade); }
+function subjectLabel(term) { const s = SUBJECTS.find((x) => x.name === term.subject); return s && s.group ? `${s.group}・${term.subject}` : term.subject; }
+function termTitle(term) { return `${subjectLabel(term)}｜${term.name}（${term.publisher}版）`; }
+function termLink(term) { return `#/term/${term.id}`; }
 
 // ---------- read-aloud ----------
 function zhVoices() { return speechSynthesis.getVoices().filter((v) => /^zh/i.test(v.lang)); }
@@ -62,24 +72,39 @@ function el(tag, attrs = {}, ...children) {
 
 // ---------- views ----------
 function homeView() {
+	const tested = new Set(history().filter((r) => !r.retry).map((r) => r.chapter));
+	const head = el("tr", {}, el("th", {}, ""), GRADES.map((g) => el("th", {}, g)));
+	const rows = SUBJECTS.map((s) => el("tr", {},
+		el("th", { class: "subject" }, s.group ? el("span", { class: "group" }, s.group) : null, s.name),
+		GRADES.map((g) => {
+			const term = findTerm(s.name, g);
+			if (!term) return el("td", {}, el("div", { class: "cell off" }, "尚未建立"));
+			const done = term.chapters.filter((c) => tested.has(term.id + "-" + c.id)).length;
+			return el("td", {}, el("a", { class: "cell on", href: termLink(term) },
+				el("b", {}, `${term.publisher}版`), el("span", {}, `已測 ${done}／${term.chapters.length} 章`)));
+		})));
+	return [el("h1", {}, "選擇科目與年級"), el("p", { class: "muted" }, "灰色的格子還沒有建立內容。"),
+		el("div", { class: "matrix-wrap" }, el("table", { class: "matrix" }, head, rows)), settingsCard()];
+}
+
+function termView(termId) {
+	const term = STUDY.terms.find((t) => t.id === termId);
+	if (!term) return notFound();
 	const results = history();
-	const parts = [el("h1", {}, "選擇章節"), el("p", { class: "muted" }, "先看「複習」重點，再做「測驗」。每章測驗都會記錄分數。")];
-	for (const term of STUDY.terms) {
-		parts.push(el("h2", { style: "margin-top:24px" }, `${term.subject}｜${term.name}（${term.publisher}版）`));
-		if (term.note) parts.push(el("p", { class: "muted" }, term.note));
-		for (const ch of term.chapters) {
-			const key = term.id + "-" + ch.id;
-			const mine = results.filter((r) => r.chapter === key && !r.retry);
-			const latest = mine[mine.length - 1];
-			const best = mine.reduce((m, r) => Math.max(m, r.score), -1);
-			const scoreText = latest ? `最近 ${latest.score} 分・最高 ${best} 分・共做 ${mine.length} 次` : "尚未測驗";
-			parts.push(el("div", { class: "card chapter" },
-				el("div", { class: "name" }, el("b", {}, ch.title), el("div", { class: "score" }, scoreText)),
-				el("a", { class: "btn secondary", href: `#/review/${key}` }, "複習"),
-				el("a", { class: "btn", href: `#/test/${key}` }, `測驗（${ch.questions.length} 題）`)));
-		}
+	const parts = [el("h1", {}, termTitle(term)), el("p", { class: "muted" }, "先看「複習」重點，再做「測驗」。每章測驗都會記錄分數。")];
+	if (term.note) parts.push(el("p", { class: "muted" }, term.note));
+	for (const ch of term.chapters) {
+		const key = term.id + "-" + ch.id;
+		const mine = results.filter((r) => r.chapter === key && !r.retry);
+		const latest = mine[mine.length - 1];
+		const best = mine.reduce((m, r) => Math.max(m, r.score), -1);
+		const scoreText = latest ? `最近 ${latest.score} 分・最高 ${best} 分・共做 ${mine.length} 次` : "尚未測驗";
+		parts.push(el("div", { class: "card chapter" },
+			el("div", { class: "name" }, el("b", {}, ch.title), el("div", { class: "score" }, scoreText)),
+			el("a", { class: "btn secondary", href: `#/review/${key}` }, "複習"),
+			el("a", { class: "btn", href: `#/test/${key}` }, `測驗（${ch.questions.length} 題）`)));
 	}
-	parts.push(settingsCard());
+	parts.push(el("div", { class: "actions" }, el("a", { class: "btn secondary", href: "#/" }, "回首頁")));
 	return parts;
 }
 
@@ -113,14 +138,14 @@ function reviewView(key) {
 	const found = findChapter(key);
 	if (!found) return notFound();
 	const { term, chapter } = found;
-	const parts = [el("p", { class: "muted" }, `${term.subject}｜${term.name}`), el("h1", {}, chapter.title)];
+	const parts = [el("a", { class: "crumb", href: termLink(term) }, `← ${subjectLabel(term)}｜${term.name}`), el("h1", {}, chapter.title)];
 	for (const block of chapter.review) {
 		const spoken = block.heading + "。" + block.points.join("\n");
 		parts.push(el("div", { class: "card" },
 			el("h2", {}, block.heading, speakButton(spoken)),
 			el("ul", { class: "points" }, block.points.map((p) => el("li", {}, p)))));
 	}
-	parts.push(el("div", { class: "actions" }, el("a", { class: "btn", href: `#/test/${key}` }, "開始測驗"), el("a", { class: "btn secondary", href: "#/" }, "回章節列表")));
+	parts.push(el("div", { class: "actions" }, el("a", { class: "btn", href: `#/test/${key}` }, "開始測驗"), el("a", { class: "btn secondary", href: termLink(term) }, "回章節列表")));
 	return parts;
 }
 
@@ -187,7 +212,7 @@ function testView(key) {
 		const actions = el("div", { class: "actions" });
 		if (wrongIds.length) actions.append(el("button", { type: "button", onclick: () => { retryPlan = { key, ids: wrongIds }; rerender(); } }, `只練錯題（${wrongIds.length} 題）`));
 		actions.append(el("button", { type: "button", class: "secondary", onclick: () => rerender() }, "整份重做"),
-			el("a", { class: "btn secondary", href: `#/review/${key}` }, "回去複習"), el("a", { class: "btn secondary", href: "#/" }, "回章節列表"));
+			el("a", { class: "btn secondary", href: `#/review/${key}` }, "回去複習"), el("a", { class: "btn secondary", href: termLink(term) }, "回章節列表"));
 		const banner = el("div", { class: "card banner" },
 			el("div", { class: "muted" }, retry ? "錯題練習結果（不計入章節分數）" : "測驗結果"),
 			el("div", { class: "big" }, `${score} 分`),
@@ -198,7 +223,7 @@ function testView(key) {
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	});
 
-	return [el("p", { class: "muted" }, `${term.subject}｜${term.name}`), el("h1", {}, chapter.title + (retry ? "：錯題練習" : "：測驗")),
+	return [el("a", { class: "crumb", href: termLink(term) }, `← ${subjectLabel(term)}｜${term.name}`), el("h1", {}, chapter.title + (retry ? "：錯題練習" : "：測驗")),
 		el("p", { class: "muted" }, "每題都選完才能交卷。題目順序每次會打亂。"),
 		cards.map((c) => c.node), el("div", { class: "actions" }, submit, progress)];
 }
@@ -213,13 +238,13 @@ function historyView() {
 		el("p", { class: "muted" }, "紀錄只存在這台電腦的這個瀏覽器裡。")];
 }
 
-function notFound() { return [el("h1", {}, "找不到這個章節"), el("a", { class: "btn", href: "#/" }, "回章節列表")]; }
+function notFound() { return [el("h1", {}, "找不到這個頁面"), el("a", { class: "btn", href: "#/" }, "回首頁")]; }
 
 // ---------- router ----------
 function rerender() {
 	speechSynthesis.cancel();
 	const [, view, key] = location.hash.split("/");
-	const content = view === "review" ? reviewView(key) : view === "test" ? testView(key) : view === "history" ? historyView() : homeView();
+	const content = view === "term" ? termView(key) : view === "review" ? reviewView(key) : view === "test" ? testView(key) : view === "history" ? historyView() : homeView();
 	app.replaceChildren(...[content].flat(2));
 	window.scrollTo(0, 0);
 }

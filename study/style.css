@@ -46,5 +46,18 @@ ul.points li { margin: 4px 0; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 table { width: 100%; border-collapse: collapse; font-size: 16px; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.crumb { color: var(--muted); font-size: 15px; text-decoration: none; }
+.matrix-wrap { overflow-x: auto; }
+table.matrix { border-collapse: separate; border-spacing: 6px; min-width: 640px; }
+.matrix th { text-align: center; border: none; color: var(--muted); font-weight: 600; }
+.matrix th.subject { text-align: left; color: var(--text); white-space: nowrap; }
+.matrix .group { display: block; font-size: 12px; color: var(--muted); font-weight: 400; line-height: 1.2; }
+.matrix td { padding: 0; border: none; }
+.cell { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 64px; border-radius: 10px; font-size: 14px; line-height: 1.4; text-align: center; }
+.cell.on { background: var(--accent); color: var(--card); text-decoration: none; }
+.cell.on:hover { filter: brightness(1.1); }
+.cell.on span { font-size: 12px; opacity: .85; }
+.cell.off { background: var(--line); color: var(--muted); opacity: .6; cursor: not-allowed; }
 .settings { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 15px; }
-select { font: inherit; font-size: 15px; max-width: 100%; }
+select { font: inherit; font-size: 15px; max-width: 100%; min-width: 0; }
+.settings label { display: flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; }
