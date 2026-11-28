@@ -244,10 +244,48 @@ function historyView() {
 
 function notFound() { return [el("h1", {}, "找不到這個頁面"), el("a", { class: "btn", href: "#/" }, "回首頁")]; }
 
+// ---------- scratchpad (數學、自然 的複習與測驗頁) ----------
+const PAD_SUBJECTS = ["數學", "自然"];
+const pad = (() => {
+	const canvas = el("canvas");
+	const ctx = canvas.getContext("2d");
+	let strokes = [], current = null, pointer = null;
+	function pen() { ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = getComputedStyle(document.body).color; }
+	function redraw() {
+		ctx.clearRect(0, 0, canvas.width, canvas.height); pen();
+		for (const s of strokes) { ctx.beginPath(); s.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); if (s.length === 1) ctx.lineTo(s[0][0] + 0.1, s[0][1]); ctx.stroke(); }
+	}
+	function resize() { const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1; canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); redraw(); }
+	function point(e) { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+	canvas.addEventListener("pointerdown", (e) => { if (pointer !== null) return; pointer = e.pointerId; canvas.setPointerCapture(e.pointerId); current = [point(e)]; strokes.push(current); redraw(); });
+	canvas.addEventListener("pointermove", (e) => {
+		if (e.pointerId !== pointer) return;
+		for (const ev of e.getCoalescedEvents ? e.getCoalescedEvents() : [e]) { const p = point(ev), q = current[current.length - 1]; current.push(p); ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(p[0], p[1]); ctx.stroke(); }
+	});
+	const end = (e) => { if (e.pointerId === pointer) { pointer = null; current = null; } };
+	canvas.addEventListener("pointerup", end);
+	canvas.addEventListener("pointercancel", end);
+
+	const isOpen = () => document.body.classList.contains("pad-open");
+	function setOpen(open) { document.body.classList.toggle("pad-open", open); if (open) resize(); }
+	const panel = el("div", { class: "pad" },
+		el("div", { class: "pad-bar" }, el("span", { class: "muted" }, "草稿"),
+			el("button", { type: "button", class: "secondary", onclick: () => { strokes.pop(); redraw(); } }, "↶ 復原"),
+			el("button", { type: "button", class: "secondary", onclick: () => { strokes = []; redraw(); } }, "清除"),
+			el("button", { type: "button", onclick: () => setOpen(false) }, "收起")),
+		canvas);
+	const tab = el("button", { type: "button", class: "pad-tab", onclick: () => setOpen(true) }, "✏️ 草稿");
+	document.body.append(panel, tab);
+	window.addEventListener("resize", () => { if (isOpen()) resize(); });
+	return { show(on) { strokes = []; document.body.classList.toggle("pad-on", on); if (!on) setOpen(false); else if (isOpen()) redraw(); } };
+})();
+
 // ---------- router ----------
 function rerender() {
 	speechSynthesis.cancel();
 	const [, view, key] = location.hash.split("/");
+	const found = (view === "review" || view === "test") && findChapter(key);
+	pad.show(!!found && PAD_SUBJECTS.includes(found.term.subject));
 	const content = view === "term" ? termView(key) : view === "review" ? reviewView(key) : view === "test" ? testView(key) : view === "history" ? historyView() : homeView();
 	app.replaceChildren(...[content].flat(2));
 	window.scrollTo(0, 0);
