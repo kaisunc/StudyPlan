@@ -86,7 +86,8 @@ function homeView() {
 			return el("td", {}, el("a", { class: "cell on", href: termLink(term) },
 				el("b", {}, `${term.publisher}版`), el("span", {}, `已測 ${done}／${term.chapters.length} 章`)));
 		})));
-	return [el("h1", {}, "選擇科目與年級"), el("p", { class: "muted" }, "灰色的格子還沒有建立內容。"),
+	const anyOff = SUBJECTS.some((s) => GRADES.some((g) => !findTerm(s.name, g)));
+	return [el("h1", {}, "選擇科目與年級"), anyOff ? el("p", { class: "muted" }, "灰色的格子還沒有建立內容。") : null,
 		el("div", { class: "matrix-wrap" }, el("table", { class: "matrix" }, head, rows)), settingsCard()];
 }
 
